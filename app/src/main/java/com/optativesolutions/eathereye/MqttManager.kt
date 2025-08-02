@@ -4,12 +4,18 @@ import android.content.Context
 import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5AsyncClient
 import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 class MqttManager(private val context: Context) {
 
     private val client: Mqtt5AsyncClient
+
+    private val _isConnected = MutableStateFlow(false)
+    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
     // CONFIGURACIÓN DEL BROKER (reemplaza con tus datos)
     private val BROKER_HOST = "b3c5c6fd4b854c78b7541d5bb30750ae.s1.eu.hivemq.cloud" // O "localhost" si es local
@@ -28,6 +34,7 @@ class MqttManager(private val context: Context) {
     }
 
     fun connect() {
+        if (client.state.isConnected) return
         client.connectWith()
             .simpleAuth()
             .username(BROKER_USERNAME)
@@ -37,8 +44,10 @@ class MqttManager(private val context: Context) {
             .whenComplete { connAck, throwable ->
                 if (throwable != null) {
                     println("❌ Error al conectar al broker MQTT: ${throwable.message}")
+                    _isConnected.value = false
                 } else {
                     println("✅ Conectado exitosamente al broker MQTT")
+                    _isConnected.value = true
                 }
             }
     }
@@ -78,6 +87,7 @@ class MqttManager(private val context: Context) {
 
     fun disconnect() {
         client.disconnect()
+        _isConnected.value = false
         println("🔌 Desconectado del broker MQTT")
     }
 }

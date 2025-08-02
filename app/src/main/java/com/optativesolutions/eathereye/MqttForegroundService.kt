@@ -45,18 +45,28 @@ class MqttForegroundService : Service() {
 
     private fun connectAndSubscribe() {
         scope.launch {
+            // Intenta conectar
             mqttManager.connect()
-            // Aquí irían las suscripciones a los topics MQTT
-            // Por ejemplo, para un VOC:
-            mqttManager.subscribe("sensor/voc/benzene") { message ->
-                message.toFloatOrNull()?.let { vocLevel ->
-                    // Lanza una nueva corrutina para no bloquear el hilo de MQTT
-                    scope.launch {
-                        checkThresholdAndNotify("Benceno", vocLevel)
-                    }
+
+            // Espera a que la conexión sea exitosa antes de suscribirse
+            mqttManager.isConnected.collect { connected ->
+                if(connected) {
+                    subscribeToNotificationTopics()
                 }
             }
         }
+    }
+
+    private fun subscribeToNotificationTopics() {
+        // Aquí solo van las suscripciones que generan notificaciones
+        mqttManager.subscribe("sensor/voc/benzene") { message ->
+            message.toFloatOrNull()?.let { vocLevel ->
+                scope.launch {
+                    checkThresholdAndNotify("Benceno", vocLevel)
+                }
+            }
+        }
+        // TODO: Añadir suscripciones para Tolueno y Xileno si también deben notificar
     }
 
     private suspend fun checkThresholdAndNotify(vocName: String, vocLevel: Float) {

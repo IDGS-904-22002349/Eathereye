@@ -52,7 +52,51 @@ class HomeViewModel (
     val uiState: StateFlow<AirQualityUiState> = _uiState.asStateFlow()
 
     init {
+        observeMqttConnection()
+    }
 
+    private fun observeMqttConnection() {
+        viewModelScope.launch {
+            // Recolectamos el flujo. Si alguna vez nos desconectamos y
+            // reconectamos, este código se volverá a ejecutar.
+            mqttManager.isConnected.collect { connected ->
+                if (connected) {
+                    // Solo cuando estemos conectados, nos suscribimos.
+                    subscribeToUiTopics()
+                }
+            }
+        }
+    }
+
+    private fun subscribeToUiTopics() {
+        // Esta función ahora solo es llamada cuando es seguro hacerlo.
+        // El código de adentro es el mismo que tenías.
+
+        // Suscripción a Presión y Temperatura
+        mqttManager.subscribe("sensor/pressure") { message ->
+            message.toFloatOrNull()?.let { newPressure ->
+                _uiState.update { it.copy(pressure = newPressure) }
+            }
+        }
+        mqttManager.subscribe("sensor/temperature") { message ->
+            message.toIntOrNull()?.let { newTemp ->
+                _uiState.update { it.copy(temperature = newTemp) }
+            }
+        }
+
+        // Suscripción a VOCs
+        _uiState.value.availableVocs.forEach { voc ->
+            mqttManager.subscribe(voc.topic) { message ->
+                message.toFloatOrNull()?.let { newLevel ->
+                    _uiState.update { currentState ->
+                        val updatedVocs = currentState.availableVocs.map {
+                            if (it.topic == voc.topic) it.copy(level = newLevel) else it
+                        }
+                        currentState.copy(availableVocs = updatedVocs)
+                    }
+                }
+            }
+        }
     }
 
     fun onVocSelected(index: Int) {

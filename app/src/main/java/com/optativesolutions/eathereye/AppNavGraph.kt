@@ -32,8 +32,11 @@ fun AppNavGraph() {
                 onNavigateToReport = { navController.navigate("report") }
             )
         }
+
         composable("report") {
-            val reportViewModel: HistoricalReportViewModel = viewModel()
+            // AHORA DEBE USAR LA FACTORY
+            val reportViewModel: HistoricalReportViewModel = viewModel(factory = factory)
+
             HistoricalReportScreen(
                 reportViewModel = reportViewModel,
                 onNavigateBack = { navController.popBackStack() }

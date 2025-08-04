@@ -1,20 +1,24 @@
 package com.optativesolutions.eathereye
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.material3.SelectableDates
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,6 +27,15 @@ fun HistoricalReportScreen(
     onNavigateBack: () -> Unit
 ) {
     val uiState by reportViewModel.uiState.collectAsState()
+    LaunchedEffect(Unit) {
+        reportViewModel.loadSelectableDates()
+    }
+    val context = LocalContext.current
+
+    uiState.userMessage?.let { message ->
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        reportViewModel.userMessageShown() // Limpia el mensaje para no mostrarlo de nuevo
+    }
 
     // Dialog para seleccionar fecha de inicio
     if (uiState.showStartDatePicker) {
@@ -37,7 +50,8 @@ fun HistoricalReportScreen(
             DatePicker(
                 onDateSelected = { dateInMillis ->
                     reportViewModel.onStartDateSelected(dateInMillis)
-                }
+                },
+                selectableDates = uiState.selectableDates
             )
         }
     }
@@ -55,7 +69,8 @@ fun HistoricalReportScreen(
             DatePicker(
                 onDateSelected = { dateInMillis ->
                     reportViewModel.onEndDateSelected(dateInMillis)
-                }
+                },
+                selectableDates = uiState.selectableDates
             )
         }
     }
@@ -140,7 +155,8 @@ fun HistoricalReportScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             Button(
-                onClick = { reportViewModel.downloadReport() },
+                onClick = { reportViewModel.downloadReport(context) },
+                enabled = !uiState.isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -155,12 +171,21 @@ fun HistoricalReportScreen(
 // Este es el componente DatePicker que usa el DatePickerDialog.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DatePicker(onDateSelected: (Long) -> Unit) {
-    val datePickerState = rememberDatePickerState()
+private fun DatePicker(onDateSelected: (Long) -> Unit, selectableDates: Set<Long>?) {
+    val datePickerState = rememberDatePickerState(
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                // Si la lista aún no ha cargado, permite seleccionar todo.
+                // Si ya cargó, solo permite fechas que estén en nuestra lista.
+                return selectableDates == null || selectableDates.contains(utcTimeMillis)
+            }
+        }
+    )
     // Observamos el estado para obtener la fecha seleccionada
-    val selectedDate = datePickerState.selectedDateMillis
-    if (selectedDate != null) {
-        onDateSelected(selectedDate)
+    LaunchedEffect(datePickerState.selectedDateMillis) {
+        datePickerState.selectedDateMillis?.let {
+            onDateSelected(it)
+        }
     }
 
     androidx.compose.material3.DatePicker(

@@ -28,7 +28,10 @@ class ViewModelFactory(private val application: Application) : ViewModelProvider
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> {
                 SettingsViewModel(app.settingsManager) as T
             }
-            // Los ViewModels sin dependencias no necesitan estar aquí
+
+            modelClass.isAssignableFrom(HistoricalReportViewModel::class.java) -> {
+                HistoricalReportViewModel(app.firebaseManager) as T
+            }
 
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }

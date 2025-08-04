@@ -24,6 +24,8 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/INDEX.LIST"
             excludes += "META-INF/io.netty.versions.properties"
+            excludes += "META-INF/native-image/resource-config.json"
+            excludes += "META-INF/native-image/reflect-config.json"
         }
     }
 
@@ -82,4 +84,5 @@ dependencies {
 
     implementation ("com.patrykandpatrick.vico:compose-m3:$vico_version")
     implementation("com.hivemq:hivemq-mqtt-client:1.3.0")
+    implementation("com.itextpdf:itext7-core:8.0.4")
 }

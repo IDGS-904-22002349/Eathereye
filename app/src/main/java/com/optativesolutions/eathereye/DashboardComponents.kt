@@ -1,15 +1,12 @@
 package com.optativesolutions.eathereye
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -19,16 +16,16 @@ import androidx.compose.ui.unit.sp
 import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
 import com.patrykandpatrick.vico.compose.chart.Chart
 import com.patrykandpatrick.vico.compose.chart.line.lineChart
+import com.patrykandpatrick.vico.core.axis.AxisItemPlacer
+import com.patrykandpatrick.vico.core.axis.AxisPosition
+import com.patrykandpatrick.vico.core.axis.formatter.AxisValueFormatter
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.entryOf
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+import java.util.TimeZone
 
 // TARJETA PARA LAS ESTADÍSTICAS (CO, VOC, Temp, Humedad)
 @Composable
@@ -55,6 +52,46 @@ fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
     }
 }
 
+// --- CAMBIO: Lógica corregida para que siempre devuelva un SimpleDateFormat ---
+@Composable
+fun rememberAdaptiveAxisFormatter(history: List<Pair<Long, Float>>): AxisValueFormatter<AxisPosition.Horizontal.Bottom> {
+    val dateFormat = remember(history) {
+        // --- CAMBIO: Se define la zona horaria de CDMX ---
+        val cdmxTimeZone = TimeZone.getTimeZone("America/Mexico_City")
+
+        val timestamps = history.map { it.first }
+
+        if (timestamps.isEmpty()) {
+            // Se crea el formato y se le aplica la zona horaria
+            SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
+                timeZone = cdmxTimeZone
+            }
+        } else {
+            val minTimestamp = timestamps.minOrNull() ?: 0L
+            val maxTimestamp = timestamps.maxOrNull() ?: 0L
+            val durationMillis = maxTimestamp - minTimestamp
+
+            when {
+                durationMillis > TimeUnit.DAYS.toMillis(1) ->
+                    // Se crea el formato y se le aplica la zona horaria
+                    SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).apply {
+                        timeZone = cdmxTimeZone
+                    }
+                else ->
+                    // Se crea el formato y se le aplica la zona horaria
+                    SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
+                        timeZone = cdmxTimeZone
+                    }
+            }
+        }
+    }
+
+    return AxisValueFormatter { value, _ ->
+        dateFormat.format(Date(value.toLong()))
+    }
+}
+
+
 @Composable
 fun VocChartSection(
     vocData: VocData,
@@ -62,22 +99,30 @@ fun VocChartSection(
     selectedIndex: Int,
     onVocSelected: (Int) -> Unit
 ) {
+    println("LOG UI: Historial para ${vocData.name} tiene ${vocData.history.size} puntos.")
     var isDropdownExpanded by remember { mutableStateOf(false) }
 
     val chartEntryModelProducer = remember(vocData.history) {
         ChartEntryModelProducer(vocData.history.map { entryOf(it.first, it.second) })
     }
 
+    val adaptiveBottomAxisFormatter = rememberAdaptiveAxisFormatter(history = vocData.history)
+
+    val itemPlacer = if (vocData.history.size > 25) {
+        AxisItemPlacer.Horizontal.default(spacing = 5, offset = 1)
+    } else {
+        AxisItemPlacer.Horizontal.default(spacing = 2, offset = 1)
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         // --- TÍTULO Y SPINNER ---
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Nivel de ${vocData.name}", // Título dinámico
+                text = "Nivel de ${vocData.name}",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.weight(1f))
-            // --- Lógica del Dropdown ---
             Box {
                 Row(
                     modifier = Modifier.clickable { isDropdownExpanded = true },
@@ -109,7 +154,6 @@ fun VocChartSection(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
-            // ... resto de la info (cambio, últimas 24h, etc.)
         }
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -118,7 +162,12 @@ fun VocChartSection(
             chart = lineChart(),
             chartModelProducer = chartEntryModelProducer,
             bottomAxis = rememberBottomAxis(
-                valueFormatter = { value, _ -> "${value.toInt()}h" }
+                valueFormatter = adaptiveBottomAxisFormatter,
+                title = "Hora",
+                guideline = null, // Quitar guideline para que itemPlacer tenga control total
+                labelRotationDegrees = 0f, // La rotación ya no debería ser necesaria
+                // --- CAMBIO: Se aplica el itemPlacer ---
+                itemPlacer = itemPlacer
             ),
             modifier = Modifier.height(150.dp)
         )

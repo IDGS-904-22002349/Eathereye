@@ -61,6 +61,7 @@ class MqttForegroundService : Service() {
         // Aquí solo van las suscripciones que generan notificaciones
         mqttManager.subscribe("sensor/voc/benzene") { message ->
             message.toFloatOrNull()?.let { vocLevel ->
+                firebaseManager.saveHistoricalReading("benzene", vocLevel)
                 scope.launch {
                     checkThresholdAndNotify("Benceno", vocLevel)
                 }

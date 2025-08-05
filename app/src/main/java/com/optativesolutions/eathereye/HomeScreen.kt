@@ -21,8 +21,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 // --- Estructura Principal de la Pantalla ---
 
 @OptIn(ExperimentalMaterial3Api::class)
+// -> CAMBIO CLAVE: La función ahora espera un String (la clave del sensor)
 @Composable
-fun HomeScreen(viewModelFactory: ViewModelFactory, onNavigateToReport: () -> Unit) {
+fun HomeScreen(viewModelFactory: ViewModelFactory, onNavigateToReport: (String) -> Unit) {
     val context = LocalContext.current
 
     val homeViewModel: HomeViewModel = viewModel(factory = viewModelFactory)
@@ -62,14 +63,14 @@ fun HomeScreen(viewModelFactory: ViewModelFactory, onNavigateToReport: () -> Uni
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            // --- AQUÍ SE CORRIGEN LAS LLAMADAS ---
             when (uiState.selectedScreenIndex) {
                 0 -> DashboardScreen(
                     state = uiState,
                     onVocSelected = homeViewModel::onVocSelected,
-                    onNavigateToReport = onNavigateToReport
+                    // Ahora esto es correcto, porque onNavigateToReport sí espera un String
+                    onNavigateToReport = { onNavigateToReport(uiState.selectedVoc.key) }
                 )
-                1 -> SensorsScreen(homeViewModel = homeViewModel) // Asumiendo que esta pantalla no ha cambiado
+                1 -> SensorsScreen(homeViewModel = homeViewModel)
                 2 -> AlertsScreen(alertsViewModel = alertsViewModel)
                 3 -> SettingsScreen(
                     settingsViewModel = settingsViewModel,

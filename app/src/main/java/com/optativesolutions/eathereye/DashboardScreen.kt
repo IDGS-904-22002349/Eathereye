@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 fun DashboardScreen(
     state: AirQualityUiState,
     onVocSelected: (Int) -> Unit,
-    onNavigateToReport: () -> Unit
+    onNavigateToReport: (String) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -76,7 +76,7 @@ fun DashboardScreen(
 
         item {
             Button(
-                onClick = onNavigateToReport,
+                onClick = { onNavigateToReport(state.selectedVoc.key) },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
             ) {

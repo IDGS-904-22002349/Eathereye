@@ -41,6 +41,12 @@ class HistoricalReportViewModel(private val firebaseManager: FirebaseManager) : 
     private val _uiState = MutableStateFlow(ReportUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var sensorKeyToReport: String = "benzene"
+
+    fun setSensorKey(key: String) {
+        sensorKeyToReport = key
+    }
+
     fun onStartDateSelected(date: Long?) {
         _uiState.update { it.copy(startDate = date, showStartDatePicker = false) }
     }
@@ -79,6 +85,7 @@ class HistoricalReportViewModel(private val firebaseManager: FirebaseManager) : 
             return
         }
 
+        val sensorToReport = sensorKeyToReport
         _uiState.update { it.copy(isLoading = true, userMessage = null) }
         val finalStartDate = state.startDate
 
@@ -91,8 +98,6 @@ class HistoricalReportViewModel(private val firebaseManager: FirebaseManager) : 
             .toInstant()
             .toEpochMilli()
 
-        val sensorToReport = "benzene"
-
         firebaseManager.fetchReportData(sensorToReport, finalStartDate, finalEndDate) { data ->
 
             if (data.isEmpty()) {
@@ -103,7 +108,7 @@ class HistoricalReportViewModel(private val firebaseManager: FirebaseManager) : 
             if (state.selectedFormat == "PDF") {
                 try {
                     val reportGenerator = PdfReportGenerator()
-                    reportGenerator.generate(context, sensorToReport, state.startDate, state.endDate, data)
+                    reportGenerator.generate(context, sensorToReport, state.startDate!!, state.endDate!!, data)
                     _uiState.update { it.copy(isLoading = false, userMessage = "Reporte PDF guardado en Descargas.") }
                 } catch (e: Exception) {
                     _uiState.update { it.copy(isLoading = false, userMessage = "Error al generar PDF: ${e.message}") }

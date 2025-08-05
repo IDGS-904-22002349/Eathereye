@@ -56,6 +56,12 @@ class HomeViewModel(
         observeMqttConnection()
     }
 
+    private fun publishSelectedVoc(vocKey: String) {
+        // Publicamos la clave del VOC seleccionado en un tópico específico.
+        // Otros dispositivos pueden suscribirse a este tópico para saber qué ve el usuario.
+        mqttManager.publish("ui/selection/active_voc", vocKey)
+    }
+
     private fun observeMqttConnection() {
         viewModelScope.launch {
             mqttManager.isConnected.collect { connected ->
@@ -109,6 +115,8 @@ class HomeViewModel(
 
         // Se suscribe al historial del VOC seleccionado por defecto al iniciar
         attachHistoryListenerFor(uiState.value.selectedVoc.key)
+
+        publishSelectedVoc(uiState.value.selectedVoc.key)
     }
 
     // --- CAMBIO --- Nueva función para manejar la lógica del listener del historial
@@ -168,8 +176,11 @@ class HomeViewModel(
         // Actualiza el estado con el nuevo índice seleccionado
         _uiState.update { it.copy(selectedVocIndex = index) }
         // Se suscribe al historial del NUEVO VOC seleccionado
+        val newSelectedVocKey = uiState.value.selectedVoc.key
         // El estado ya se actualizó en la línea anterior, por lo que selectedVoc.name es el nuevo.
-        attachHistoryListenerFor(uiState.value.selectedVoc.key)
+        attachHistoryListenerFor(newSelectedVocKey)
+
+        publishSelectedVoc(newSelectedVocKey)
     }
 
     fun activateExtractionSystem(activate: Boolean) {

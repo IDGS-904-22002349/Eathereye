@@ -98,7 +98,10 @@ class HistoricalReportViewModel(private val firebaseManager: FirebaseManager) : 
             .toInstant()
             .toEpochMilli()
 
-        firebaseManager.fetchReportData(sensorToReport, finalStartDate, finalEndDate) { data ->
+        val sensorToReportKey = sensorKeyToReport
+        val sensorToReportName = VocUtils.getVocNameByKey(sensorToReportKey)
+
+        firebaseManager.fetchReportData(sensorToReportKey, finalStartDate, finalEndDate) { data ->
 
             if (data.isEmpty()) {
                 _uiState.update { it.copy(isLoading = false, userMessage = "No se encontraron registros en ese rango.") }
@@ -108,7 +111,7 @@ class HistoricalReportViewModel(private val firebaseManager: FirebaseManager) : 
             if (state.selectedFormat == "PDF") {
                 try {
                     val reportGenerator = PdfReportGenerator()
-                    reportGenerator.generate(context, sensorToReport, state.startDate!!, state.endDate!!, data)
+                    reportGenerator.generate(context, sensorToReportName, state.startDate, state.endDate, data)
                     _uiState.update { it.copy(isLoading = false, userMessage = "Reporte PDF guardado en Descargas.") }
                 } catch (e: Exception) {
                     _uiState.update { it.copy(isLoading = false, userMessage = "Error al generar PDF: ${e.message}") }
@@ -116,7 +119,7 @@ class HistoricalReportViewModel(private val firebaseManager: FirebaseManager) : 
             } else {
                 try {
                     val reportGenerator = CsvReportGenerator()
-                    reportGenerator.generate(context, sensorToReport, data)
+                    reportGenerator.generate(context, sensorToReportName, data)
                     _uiState.update { it.copy(isLoading = false, userMessage = "Reporte CSV guardado en Descargas.") }
                 } catch (e: Exception) {
                     _uiState.update { it.copy(isLoading = false, userMessage = "Error al generar CSV: ${e.message}") }

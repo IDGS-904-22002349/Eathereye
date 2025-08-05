@@ -28,12 +28,12 @@ class PdfReportGenerator {
 
     fun generate(
         context: Context,
-        sensorName: String,
+        vocName: String,
         startDate: Long,
         endDate: Long,
         data: List<Pair<Long, Float>>
     ): Uri? {
-        val fileName = "Reporte_${sensorName}_${System.currentTimeMillis()}.pdf"
+        val fileName = "Reporte_${vocName}_${System.currentTimeMillis()}.pdf"
         val outputStream: FileOutputStream
 
         var uri: Uri? = null
@@ -74,7 +74,7 @@ class PdfReportGenerator {
                 .setBold().setFontSize(18f).setTextAlignment(TextAlignment.CENTER)
         )
         document.add(
-            Paragraph("Sensor: ${sensorName.capitalize(Locale.ROOT)}")
+            Paragraph("Sensor: ${vocName.capitalize(Locale.ROOT)}")
                 .setTextAlignment(TextAlignment.CENTER)
         )
         document.add(

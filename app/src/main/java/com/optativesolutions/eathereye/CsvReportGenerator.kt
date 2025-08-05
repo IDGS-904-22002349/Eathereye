@@ -16,10 +16,10 @@ class CsvReportGenerator {
 
     fun generate(
         context: Context,
-        sensorName: String,
+        vocName: String,
         data: List<Pair<Long, Float>>
     ): Uri? {
-        val fileName = "Reporte_${sensorName}_${System.currentTimeMillis()}.csv"
+        val fileName = "Reporte_${vocName}_${System.currentTimeMillis()}.csv"
         val stringBuilder = StringBuilder()
 
         // --- Creación del Contenido del CSV ---

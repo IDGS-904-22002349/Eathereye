@@ -63,11 +63,18 @@ class MqttForegroundService : Service() {
             message.toFloatOrNull()?.let { vocLevel ->
                 firebaseManager.saveHistoricalReading("benzene", vocLevel)
                 scope.launch {
-                    checkThresholdAndNotify("Benceno", vocLevel)
+                    checkThresholdAndNotify("Acetona", vocLevel)
                 }
             }
         }
-        // TODO: Añadir suscripciones para Tolueno y Xileno si también deben notificar
+        mqttManager.subscribe("sensor/voc/toluene") { message ->
+            message.toFloatOrNull()?.let { vocLevel ->
+                firebaseManager.saveHistoricalReading("toluene", vocLevel)
+                scope.launch {
+                    checkThresholdAndNotify("Alcohol Isopropílico", vocLevel)
+                }
+            }
+        }
     }
 
     private suspend fun checkThresholdAndNotify(vocName: String, vocLevel: Float) {

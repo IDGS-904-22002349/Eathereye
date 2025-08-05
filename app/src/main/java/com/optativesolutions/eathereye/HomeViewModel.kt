@@ -22,12 +22,11 @@ data class VocData(
 
 data class AirQualityUiState(
     val pressure: Float = 1013f,
-    val temperature: Int = 22,
-    val humidity: Int = 60,
+    val temperature: Float = 22.0f,
+    val humidity: Float = 60.0f,
     val availableVocs: List<VocData> = listOf(
-        VocData(key = "benzene", name = "Benceno", topic = "sensor/voc/benzene"),
-        VocData(key = "toluene", name = "Tolueno", topic = "sensor/voc/toluene"),
-        VocData(key = "xylene", name = "Xileno", topic = "sensor/voc/xylene")
+        VocData(key = "benzene", name = "Acetona", topic = "sensor/voc/benzene"),
+        VocData(key = "toluene", name = "Alcohol Isopropílico", topic = "sensor/voc/toluene")
     ),
     val selectedVocIndex: Int = 0,
     val isExtractionSystemActive: Boolean = false,
@@ -77,9 +76,17 @@ class HomeViewModel(
             }
         }
         mqttManager.subscribe("sensor/temperature") { message ->
-            message.toIntOrNull()?.let { newTemp ->
+            message.toFloatOrNull()?.let { newTemp ->
                 viewModelScope.launch { // Añadir este launch
                     _uiState.update { it.copy(temperature = newTemp) }
+                }
+            }
+        }
+
+        mqttManager.subscribe("sensor/humidity") { message ->
+            message.toFloatOrNull()?.let { newHumidity ->
+                viewModelScope.launch {
+                    _uiState.update { it.copy(humidity = newHumidity) }
                 }
             }
         }

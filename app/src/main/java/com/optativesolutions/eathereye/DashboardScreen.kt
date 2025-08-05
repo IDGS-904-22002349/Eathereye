@@ -40,15 +40,26 @@ fun DashboardScreen(
                     // --- TARJETA DE PRESIÓN (Antes CO) ---
                     StatCard(
                         title = "Presión",
-                        value = "${state.pressure.toInt()} hPa", // Nueva unidad
+                        value = "%.1f hPa".format(state.pressure), // Nueva unidad
                         modifier = Modifier.weight(1f)
                     )
                     // --- TARJETA DE TEMPERATURA ---
                     StatCard(
                         title = "Temperatura",
-                        value = "${state.temperature}°C",
+                        value = "%.1f °C".format(state.temperature),
                         modifier = Modifier.weight(1f)
                     )
+                }
+                Row {
+                    StatCard(
+                        title = "Humedad",
+                        // Muestra un decimal y el símbolo '%'
+                        value = "%.1f %%".format(state.humidity),
+                        modifier = Modifier.weight(1f)
+                    )
+                    // Dejamos un Spacer para ocupar el espacio del segundo elemento
+                    // y que la tarjeta de humedad no ocupe toda la fila.
+                    Spacer(modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
                 }
             }
         }

@@ -10,9 +10,8 @@ import kotlinx.coroutines.launch
 // Estado de la UI para la pantalla de configuración
 data class SettingsUiState(
     val vocThresholds: Map<String, Float> = mapOf( // Umbrales por nombre de VOC
-        "Benceno" to 10f,
-        "Tolueno" to 8f,
-        "Xileno" to 12f
+        "Acetona" to 10f,
+        "Alcohol Isopropílico" to 8f
 ),
     val areNotificationsEnabled: Boolean = true,
     val isAlarmSoundOn: Boolean = false

@@ -63,7 +63,7 @@ class MqttForegroundService : Service() {
             message.toFloatOrNull()?.let { vocLevel ->
                 firebaseManager.saveHistoricalReading("benzene", vocLevel)
                 scope.launch {
-                    checkThresholdAndNotify("Acetona", vocLevel)
+                    checkThresholdAndNotify("benzene", vocLevel)
                 }
             }
         }
@@ -71,21 +71,22 @@ class MqttForegroundService : Service() {
             message.toFloatOrNull()?.let { vocLevel ->
                 firebaseManager.saveHistoricalReading("toluene", vocLevel)
                 scope.launch {
-                    checkThresholdAndNotify("Alcohol Isopropílico", vocLevel)
+                    checkThresholdAndNotify("toluene", vocLevel)
                 }
             }
         }
     }
 
-    private suspend fun checkThresholdAndNotify(vocName: String, vocLevel: Float) {
+    private suspend fun checkThresholdAndNotify(vocKey: String, vocLevel: Float) {
         // Lee la configuración más reciente desde DataStore
         val preferences = settingsManager.settingsFlow.first()
         // Aquí también leerías el umbral específico para `vocName`
-        val vocThreshold = 10f // TODO: Leer umbral desde DataStore
+        val vocThreshold = preferences.vocThresholds[vocKey] ?: 10f // TODO: Leer umbral desde DataStore
 
         if (preferences.areNotificationsEnabled && vocLevel > vocThreshold) {
+            val vocName = if(vocKey == "benzene") "Acetona" else "Alcohol Isopropílico"
             val title = "¡Alerta de $vocName!"
-            val message = "Nivel detectado: $vocLevel ppm. Umbral: $vocThreshold ppm."
+            val message = "Nivel detectado: %.1f ppm. Umbral: %.1f ppm.".format(vocLevel, vocThreshold)
 
             firebaseManager.saveNotification(title, message)
             notificationHelper.showNotification(title, message, preferences.isAlarmSoundOn)

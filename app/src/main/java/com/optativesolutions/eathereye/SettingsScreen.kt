@@ -20,7 +20,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, homeViewModel: HomeView
     val homeUiState by homeViewModel.uiState.collectAsState()
 
     val selectedVoc = homeUiState.selectedVoc
-    val vocThreshold = settingsUiState.vocThresholds[selectedVoc.name] ?: 0f
+    val vocThreshold = settingsUiState.vocThresholds[selectedVoc.key] ?: 0f
 
     LazyColumn(
         modifier = Modifier
@@ -41,7 +41,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, homeViewModel: HomeView
                     ThresholdSlider(
                         title = "Umbral de ${selectedVoc.name}",
                         value = vocThreshold,
-                        onValueChange = { newValue -> settingsViewModel.onVocThresholdChange(selectedVoc.name, newValue) },
+                        onValueChange = { newValue -> settingsViewModel.onVocThresholdChange(selectedVoc.key, newValue) },
                         valueRange = 0f..50f,
                         unit = "ppm"
                     )

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -113,9 +114,12 @@ class HomeViewModel(
             }
         }
 
-        // Se suscribe al historial del VOC seleccionado por defecto al iniciar
-        attachHistoryListenerFor(uiState.value.selectedVoc.key)
+        viewModelScope.launch {
+            delay(1500) // Espera 1.5 segundos antes de cargar los datos del gráfico.
+            attachHistoryListenerFor(uiState.value.selectedVoc.key)
+        }
 
+        // Publicar el VOC inicial. Esto ahora se ejecutará antes de la carga pesada.
         publishSelectedVoc(uiState.value.selectedVoc.key)
     }
 

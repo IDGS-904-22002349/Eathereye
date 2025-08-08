@@ -35,13 +35,8 @@ fun HomeScreen(viewModelFactory: ViewModelFactory, onNavigateToReport: (String) 
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text(uiState.currentScreenTitle) },
-                navigationIcon = {
-                    IconButton(onClick = { /* TODO: Abrir menú lateral */ }) {
-                        Icon(Icons.Filled.Menu, contentDescription = "Menú")
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
             )
         },

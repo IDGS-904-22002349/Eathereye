@@ -18,7 +18,7 @@ class MqttManager(private val context: Context) {
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
     // CONFIGURACIÓN DEL BROKER (reemplaza con tus datos)
-    private val BROKER_HOST = "b3c5c6fd4b854c78b7541d5bb30750ae.s1.eu.hivemq.cloud" // O "localhost" si es local
+    private val BROKER_HOST = "a726e4550cb749229a095b2d4c2e29e9.s1.eu.hivemq.cloud" // O "localhost" si es local
     private val BROKER_PORT = 8883 // O 1883 si es local y sin TLS
     private val BROKER_USERNAME = "cesarzr"
     private val BROKER_PASSWORD = "Hola123456"
@@ -72,13 +72,20 @@ class MqttManager(private val context: Context) {
     }
 
     fun publish(topic: String, message: String) {
+        // -> CAMBIO: Añadir una guarda para no publicar si no estamos conectados.
+        if (!_isConnected.value || !client.state.isConnected) {
+            println("⚠️ No se puede publicar en '$topic'. Cliente MQTT no conectado.")
+            return // Salimos de la función para no causar un error.
+        }
+
         client.publishWith()
             .topic(topic)
             .payload(message.toByteArray())
             .send()
             .whenComplete { publish, throwable ->
                 if (throwable != null) {
-                    println("❌ Error al publicar en topic '$topic'")
+                    // Este error ahora solo debería aparecer si la conexión se cae justo al publicar.
+                    println("❌ Error al publicar en topic '$topic': ${throwable.message}")
                 } else {
                     println("🚀 Mensaje publicado exitosamente en topic '$topic'")
                 }

@@ -22,87 +22,147 @@ data class AlertNotification(
 )
 
 class FirebaseManager {
+
+    companion object {
+        // Zona horaria consistente para toda la aplicación
+        val APP_TIMEZONE: ZoneId = ZoneId.of("America/Mexico_City")
+        private const val MAX_RETRIES = 3
+    }
+
     private val database = Firebase.database.reference.child("notifications")
     private val _notifications = MutableStateFlow<List<AlertNotification>>(emptyList())
     val notifications: StateFlow<List<AlertNotification>> = _notifications
     private val historicalDb = Firebase.database.reference.child("historical_data")
 
+    // Mantiene registro de listeners activos para evitar memory leaks
+    private val activeListeners = mutableMapOf<String, ValueEventListener>()
+
     init {
         readNotifications()
     }
 
-    fun saveHistoricalReading(sensorName: String, value: Float) {
-        // Usamos el timestamp actual como clave única
+    fun saveHistoricalReading(
+        sensorName: String,
+        value: Float,
+        onSuccess: (() -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
         val timestamp = System.currentTimeMillis()
-        val reading = mapOf("value" to value)
+        val reading = mapOf(
+            "value" to value,
+            "timestamp" to timestamp // Agregamos timestamp explícito
+        )
 
-        // Guardamos en la ruta: historical_data/{nombre_sensor}/{timestamp}
-        historicalDb.child(sensorName.lowercase()).child(timestamp.toString()).setValue(reading)
+        historicalDb.child(sensorName.lowercase())
+            .child(timestamp.toString())
+            .setValue(reading)
             .addOnSuccessListener {
-                // Opcional: imprimir en log que se guardó bien
-                println("Dato histórico guardado para $sensorName")
+                println("Dato histórico guardado para $sensorName: $value")
+                onSuccess?.invoke()
             }
-            .addOnFailureListener {
-                // Opcional: manejar el error
-                println("Error al guardar dato histórico: ${it.message}")
+            .addOnFailureListener { exception ->
+                val errorMsg = "Error al guardar dato histórico: ${exception.message}"
+                println(errorMsg)
+                onError?.invoke(errorMsg)
             }
     }
 
-    fun saveNotification(title: String, message: String) {
-        val id = database.push().key ?: return
+    fun saveNotification(
+        title: String,
+        message: String,
+        onSuccess: (() -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
+        val id = database.push().key
+        if (id == null) {
+            onError?.invoke("No se pudo generar ID para la notificación")
+            return
+        }
+
         val notification = AlertNotification(id, title, message, System.currentTimeMillis())
         database.child(id).setValue(notification)
+            .addOnSuccessListener { onSuccess?.invoke() }
+            .addOnFailureListener { onError?.invoke(it.message ?: "Error desconocido") }
     }
 
     private fun readNotifications() {
         database.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val notificationList = snapshot.children.mapNotNull {
-                    it.getValue(AlertNotification::class.java)
+                try {
+                    val notificationList = snapshot.children.mapNotNull {
+                        it.getValue(AlertNotification::class.java)
+                    }
+                    _notifications.value = notificationList.sortedByDescending { it.timestamp }
+                } catch (e: Exception) {
+                    println("Error al leer notificaciones: ${e.message}")
                 }
-                _notifications.value = notificationList.sortedByDescending { it.timestamp }
             }
 
             override fun onCancelled(error: DatabaseError) {
-                // TODO: Manejar error
+                println("Error en listener de notificaciones: ${error.message}")
             }
         })
     }
 
-    fun getHistoricalDataListener(sensorKey: String, onDataChange: (DataSnapshot) -> Unit) : ValueEventListener {
+    fun getHistoricalDataListener(
+        sensorKey: String,
+        onDataChange: (DataSnapshot) -> Unit,
+        onError: ((String) -> Unit)? = null
+    ): ValueEventListener {
         val query = historicalDb.child(sensorKey).orderByKey().limitToLast(100)
 
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                onDataChange(snapshot)
+                try {
+                    onDataChange(snapshot)
+                } catch (e: Exception) {
+                    onError?.invoke("Error al procesar datos históricos: ${e.message}")
+                }
             }
+
             override fun onCancelled(error: DatabaseError) {
-                println("Error al leer historial: ${error.message}")
+                val errorMsg = "Error al leer historial: ${error.message}"
+                println(errorMsg)
+                onError?.invoke(errorMsg)
             }
         }
+
         query.addValueEventListener(listener)
+        activeListeners[sensorKey] = listener
         return listener
     }
 
     fun removeHistoricalDataListener(sensorKey: String, listener: ValueEventListener) {
         historicalDb.child(sensorKey).removeEventListener(listener)
+        activeListeners.remove(sensorKey)
     }
 
-    fun getDatesWithData(sensorName: String, onComplete: (Set<Long>) -> Unit) {
+    fun getDatesWithData(
+        sensorName: String,
+        onComplete: (Set<Long>) -> Unit,
+        onError: ((String) -> Unit)? = null
+    ) {
         val query = historicalDb.child(sensorName.lowercase()).orderByKey()
-        val userTimeZone = ZoneId.of("America/Mexico_City")
 
         query.get().addOnSuccessListener { snapshot ->
-            val datesWithData = snapshot.children.mapNotNull {
-                it.key?.toLongOrNull()
-            }.map { timestamp ->
-                val instant = Instant.ofEpochMilli(timestamp)
-                val localDate = instant.atZone(userTimeZone).toLocalDate()
-                val utcMidnightInstant = localDate.atStartOfDay().toInstant(ZoneOffset.UTC)
-                utcMidnightInstant.toEpochMilli()
-            }.toSet() // .toSet() elimina los duplicados y nos da los días únicos
+            try {
+                val datesWithData = snapshot.children.mapNotNull {
+                    it.key?.toLongOrNull()
+                }.map { timestamp ->
+                    // Convertir timestamp a fecha UTC medianoche para consistency
+                    val instant = Instant.ofEpochMilli(timestamp)
+                    val localDate = instant.atZone(APP_TIMEZONE).toLocalDate()
+                    val utcMidnightInstant = localDate.atStartOfDay().toInstant(ZoneOffset.UTC)
+                    utcMidnightInstant.toEpochMilli()
+                }.toSet()
 
-            onComplete(datesWithData)
+                onComplete(datesWithData)
+            } catch (e: Exception) {
+                onError?.invoke("Error al procesar fechas: ${e.message}")
+            }
+        }.addOnFailureListener { exception ->
+            val errorMsg = "Error al obtener fechas con datos: ${exception.message}"
+            onError?.invoke(errorMsg)
         }
     }
 
@@ -110,25 +170,68 @@ class FirebaseManager {
         sensorName: String,
         startDate: Long,
         endDate: Long,
-        onComplete: (List<Pair<Long, Float>>) -> Unit
+        onComplete: (List<Pair<Long, Float>>) -> Unit,
+        onError: ((String) -> Unit)? = null
     ) {
+        // Validación de parámetros
+        if (startDate > endDate) {
+            onError?.invoke("La fecha de inicio no puede ser mayor que la fecha de fin")
+            return
+        }
+
         val query = historicalDb.child(sensorName.lowercase())
             .orderByKey()
             .startAt(startDate.toString())
-            .endAt(endDate.toString())
+            .endAt((endDate + 1).toString()) // +1 ms para incluir el último registro
 
         query.get().addOnSuccessListener { snapshot ->
-            val dataList = snapshot.children.mapNotNull {
-                val timestamp = it.key?.toLongOrNull()
-                val rawValue: Any? = it.child("value").value
-                val value: Float? = when (rawValue) {
-                    is Long -> rawValue.toFloat()
-                    is Double -> rawValue.toFloat()
-                    else -> null // Ignora cualquier otro tipo de dato
-                }
-                if (timestamp != null && value != null) Pair(timestamp, value) else null
+            try {
+                val dataList = snapshot.children.mapNotNull { dataSnapshot ->
+                    val timestamp = dataSnapshot.key?.toLongOrNull()
+                    val rawValue: Any? = dataSnapshot.child("value").value
+
+                    val value: Float? = when (rawValue) {
+                        is Long -> rawValue.toFloat()
+                        is Double -> rawValue.toFloat()
+                        is Float -> rawValue
+                        is Int -> rawValue.toFloat()
+                        else -> {
+                            println("Tipo de dato no reconocido para valor: $rawValue (${rawValue?.javaClass})")
+                            null
+                        }
+                    }
+
+                    if (timestamp != null && value != null &&
+                        timestamp >= startDate && timestamp <= endDate) {
+                        Pair(timestamp, value)
+                    } else null
+                }.sortedBy { it.first } // Ordenar por timestamp
+
+                println("Datos obtenidos para reporte: ${dataList.size} registros")
+                onComplete(dataList)
+            } catch (e: Exception) {
+                val errorMsg = "Error al procesar datos del reporte: ${e.message}"
+                onError?.invoke(errorMsg)
             }
-            onComplete(dataList)
+        }.addOnFailureListener { exception ->
+            val errorMsg = "Error al obtener datos del reporte: ${exception.message}"
+            onError?.invoke(errorMsg)
+        }
+    }
+
+    // Método para limpiar todos los listeners al destruir la instancia
+    fun cleanup() {
+        activeListeners.forEach { (sensorKey, listener) ->
+            historicalDb.child(sensorKey).removeEventListener(listener)
+        }
+        activeListeners.clear()
+    }
+
+    // Método para verificar conectividad
+    fun checkConnectivity(onResult: (Boolean) -> Unit) {
+        val testRef = Firebase.database.reference.child(".info/connected")
+        testRef.get().addOnCompleteListener { task ->
+            onResult(task.isSuccessful && task.result?.getValue(Boolean::class.java) == true)
         }
     }
 }

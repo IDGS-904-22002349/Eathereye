@@ -32,14 +32,13 @@ data class AirQualityUiState(
     val selectedVocIndex: Int = 0,
     val isExtractionSystemActive: Boolean = false,
     val selectedScreenIndex: Int = 0,
-    val screenTitles: List<String> = listOf("Inicio", "Extracción Manual", "Alertas", "Configuración")
+    val screenTitles: List<String> = listOf("Inicio", "Extracción Manual", "Alertas", "Configuración"),
+    val errorMessage: String? = null // Agregado para manejar errores
 ) {
     val currentScreenTitle: String get() = screenTitles[selectedScreenIndex]
     val selectedVoc: VocData get() = availableVocs.getOrElse(selectedVocIndex) { availableVocs.first() }
 }
 
-
-// --- CAMBIO --- El constructor ya no incluye historyListener
 class HomeViewModel(
     private val mqttManager: MqttManager,
     private val firebaseManager: FirebaseManager,
@@ -50,7 +49,7 @@ class HomeViewModel(
     private val _uiState = MutableStateFlow(AirQualityUiState())
     val uiState: StateFlow<AirQualityUiState> = _uiState.asStateFlow()
 
-    // --- CAMBIO --- historyListener se define como una propiedad de la clase
+    // historyListener se define como una propiedad de la clase
     private var historyListener: ValueEventListener? = null
 
     init {
@@ -58,8 +57,6 @@ class HomeViewModel(
     }
 
     private fun publishSelectedVoc(vocKey: String) {
-        // Publicamos la clave del VOC seleccionado en un tópico específico.
-        // Otros dispositivos pueden suscribirse a este tópico para saber qué ve el usuario.
         mqttManager.publish("ui/selection/active_voc", vocKey)
     }
 
@@ -77,14 +74,15 @@ class HomeViewModel(
         // Suscripción a Presión y Temperatura
         mqttManager.subscribe("sensor/pressure") { message ->
             message.toFloatOrNull()?.let { newPressure ->
-                viewModelScope.launch { // Añadir este launch
+                viewModelScope.launch {
                     _uiState.update { it.copy(pressure = newPressure) }
                 }
             }
         }
+
         mqttManager.subscribe("sensor/temperature") { message ->
             message.toFloatOrNull()?.let { newTemp ->
-                viewModelScope.launch { // Añadir este launch
+                viewModelScope.launch {
                     _uiState.update { it.copy(temperature = newTemp) }
                 }
             }
@@ -102,14 +100,16 @@ class HomeViewModel(
         _uiState.value.availableVocs.forEach { voc ->
             mqttManager.subscribe(voc.topic) { message ->
                 message.toFloatOrNull()?.let { newLevel ->
-                    viewModelScope.launch { // Añadir este launch
-                        _uiState.update { currentState ->
-                            val updatedVocs = currentState.availableVocs.map {
-                                if (it.topic == voc.topic) it.copy(level = newLevel) else it
-                            }
-                            currentState.copy(availableVocs = updatedVocs)
+
+                    // La única responsabilidad aquí es actualizar la UI.
+                    // La llamada a firebaseManager.saveHistoricalReading() se ha eliminado.
+                    _uiState.update { currentState ->
+                        val updatedVocs = currentState.availableVocs.map {
+                            if (it.topic == voc.topic) it.copy(level = newLevel) else it
                         }
+                        currentState.copy(availableVocs = updatedVocs)
                     }
+
                 }
             }
         }
@@ -123,69 +123,125 @@ class HomeViewModel(
         publishSelectedVoc(uiState.value.selectedVoc.key)
     }
 
-    // --- CAMBIO --- Nueva función para manejar la lógica del listener del historial
+    // Nueva función para manejar la lógica del listener del historial
     private fun attachHistoryListenerFor(vocName: String) {
+        println("🔄 Adjuntando listener de historial para: $vocName")
         removeHistoryListener()
 
-        // El callback ahora recibe un DataSnapshot
-        historyListener = firebaseManager.getHistoricalDataListener(vocName) { snapshot ->
-            // Inicia una corrutina en un hilo secundario para no bloquear la UI
-            viewModelScope.launch(Dispatchers.Default) {
-                // --- TRABAJO PESADO EN SEGUNDO PLANO ---
-                val dataList = snapshot.children.mapNotNull {
-                    val timestamp = it.key?.toLongOrNull()
-                    val rawValue: Any? = it.child("value").value
-                    // Obtenemos el valor como un objeto y lo convertimos a Number de forma segura
-                    val value: Float? = when (rawValue) {
-                        is Long -> rawValue.toFloat()
-                        is Double -> rawValue.toFloat()
-                        else -> null // Ignora cualquier otro tipo de dato
-                    }
-                    if (timestamp != null && value != null) {
-                        Pair(timestamp, value)
-                    } else {
-                        null
-                    }
-                }
-                println("LOG VM: Datos históricos recibidos para $vocName: ${dataList.size} puntos.")
+        // ACTUALIZADO: Usar la nueva firma con callback de error
+        historyListener = firebaseManager.getHistoricalDataListener(
+            sensorKey = vocName,
+            onDataChange = { snapshot ->
+                // Inicia una corrutina en un hilo secundario para no bloquear la UI
+                viewModelScope.launch(Dispatchers.Default) {
+                    try {
+                        // --- TRABAJO PESADO EN SEGUNDO PLANO ---
+                        val dataList = snapshot.children.mapNotNull { dataSnapshot ->
+                            val timestamp = dataSnapshot.key?.toLongOrNull()
+                            val rawValue: Any? = dataSnapshot.child("value").value
 
-                // Una vez procesada la lista, actualizamos el estado de la UI
-                // en el hilo principal, que es un requisito de Compose.
-                launch(Dispatchers.Main) {
-                    _uiState.update { currentState ->
-                        val updatedVocs = currentState.availableVocs.map {
-                            if (it.key == vocName) {
-                                it.copy(history = dataList)
+                            // Manejo más robusto de tipos de datos
+                            val value: Float? = when (rawValue) {
+                                is Long -> rawValue.toFloat()
+                                is Double -> rawValue.toFloat()
+                                is Float -> rawValue
+                                is Int -> rawValue.toFloat()
+                                else -> {
+                                    println("⚠️ Tipo de dato no reconocido en historial: $rawValue (${rawValue?.javaClass})")
+                                    null
+                                }
+                            }
+
+                            if (timestamp != null && value != null) {
+                                Pair(timestamp, value)
                             } else {
-                                it
+                                null
+                            }
+                        }.sortedBy { it.first } // Ordenar por timestamp
+
+                        println("📊 Datos históricos procesados para $vocName: ${dataList.size} puntos")
+
+                        // Una vez procesada la lista, actualizamos el estado de la UI
+                        // en el hilo principal, que es un requisito de Compose.
+                        launch(Dispatchers.Main) {
+                            _uiState.update { currentState ->
+                                val updatedVocs = currentState.availableVocs.map { voc ->
+                                    if (voc.key == vocName) {
+                                        // Calcular el cambio basado en los últimos dos valores
+                                        val change = if (dataList.size >= 2) {
+                                            val latest = dataList.last().second
+                                            val previous = dataList[dataList.size - 2].second
+                                            latest - previous
+                                        } else {
+                                            0f
+                                        }
+
+                                        voc.copy(
+                                            history = dataList,
+                                            change = change
+                                        )
+                                    } else {
+                                        voc
+                                    }
+                                }
+                                currentState.copy(
+                                    availableVocs = updatedVocs,
+                                    errorMessage = null // Limpiar error si la operación fue exitosa
+                                )
                             }
                         }
-                        currentState.copy(availableVocs = updatedVocs)
+                    } catch (e: Exception) {
+                        println("❌ Error procesando datos históricos: ${e.message}")
+                        launch(Dispatchers.Main) {
+                            _uiState.update {
+                                it.copy(errorMessage = "Error procesando historial: ${e.message}")
+                            }
+                        }
+                    }
+                }
+            },
+            onError = { error ->
+                println("❌ Error en listener de historial para $vocName: $error")
+                viewModelScope.launch {
+                    _uiState.update {
+                        it.copy(errorMessage = "Error cargando historial de $vocName: $error")
                     }
                 }
             }
-        }
+        )
     }
 
-    // --- CAMBIO --- Nueva función para limpiar el listener
+    // Nueva función para limpiar el listener
     private fun removeHistoryListener() {
-        historyListener?.let {
-            firebaseManager.removeHistoricalDataListener(uiState.value.selectedVoc.key, it)
+        historyListener?.let { listener ->
+            val currentVocKey = uiState.value.selectedVoc.key
+            println("🧹 Removiendo listener de historial para: $currentVocKey")
+            firebaseManager.removeHistoricalDataListener(currentVocKey, listener)
         }
         historyListener = null
     }
 
-    // --- CAMBIO --- Lógica mejorada para cuando se selecciona un nuevo VOC
+    // Lógica mejorada para cuando se selecciona un nuevo VOC
     fun onVocSelected(index: Int) {
+        val previousVocKey = uiState.value.selectedVoc.key
+
         // Actualiza el estado con el nuevo índice seleccionado
-        _uiState.update { it.copy(selectedVocIndex = index) }
+        _uiState.update { it.copy(selectedVocIndex = index, errorMessage = null) }
+
         // Se suscribe al historial del NUEVO VOC seleccionado
         val newSelectedVocKey = uiState.value.selectedVoc.key
-        // El estado ya se actualizó en la línea anterior, por lo que selectedVoc.name es el nuevo.
-        attachHistoryListenerFor(newSelectedVocKey)
+
+        println("🔄 Cambiando de VOC: $previousVocKey -> $newSelectedVocKey")
+
+        // Solo cambiar listener si es realmente diferente
+        if (previousVocKey != newSelectedVocKey) {
+            attachHistoryListenerFor(newSelectedVocKey)
+        }
 
         publishSelectedVoc(newSelectedVocKey)
     }
+
+
 
     fun activateExtractionSystem(activate: Boolean) {
         val command = if (activate) "ON" else "OFF"
@@ -197,9 +253,18 @@ class HomeViewModel(
         _uiState.update { it.copy(selectedScreenIndex = index) }
     }
 
-    // --- CAMBIO --- onCleared ahora limpia el listener
+    // Función para limpiar mensajes de error
+    fun clearErrorMessage() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    // onCleared ahora limpia el listener
     override fun onCleared() {
         super.onCleared()
+        println("🧹 Limpiando HomeViewModel")
         removeHistoryListener()
+
+        // Opcional: limpiar también el FirebaseManager si es necesario
+        // firebaseManager.cleanup()
     }
 }

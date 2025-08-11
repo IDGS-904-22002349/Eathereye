@@ -22,6 +22,12 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, homeViewModel: HomeView
     val selectedVoc = homeUiState.selectedVoc
     val vocThreshold = settingsUiState.vocThresholds[selectedVoc.key] ?: 0f
 
+    val rangoDinamico = when (selectedVoc.key) {
+        "benzene" -> 0f..1000f
+        "toluene" -> 0f..400f
+        else -> 0f..50f // Rango por defecto para otros VOCs
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -42,7 +48,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, homeViewModel: HomeView
                         title = "Umbral de ${selectedVoc.name}",
                         value = vocThreshold,
                         onValueChange = { newValue -> settingsViewModel.onVocThresholdChange(selectedVoc.key, newValue) },
-                        valueRange = 0f..50f,
+                        valueRange = rangoDinamico,
                         unit = "ppm"
                     )
                 }

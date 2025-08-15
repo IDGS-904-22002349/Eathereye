@@ -24,8 +24,8 @@ import com.patrykandpatrick.vico.core.entry.entryOf
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 
 // TARJETA PARA LAS ESTADÍSTICAS (CO, VOC, Temp, Humedad)
 @Composable
@@ -52,17 +52,13 @@ fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
     }
 }
 
-// --- CAMBIO: Lógica corregida para que siempre devuelva un SimpleDateFormat ---
 @Composable
 fun rememberAdaptiveAxisFormatter(history: List<Pair<Long, Float>>): AxisValueFormatter<AxisPosition.Horizontal.Bottom> {
     val dateFormat = remember(history) {
-        // --- CAMBIO: Se define la zona horaria de CDMX ---
         val cdmxTimeZone = TimeZone.getTimeZone("America/Mexico_City")
-
         val timestamps = history.map { it.first }
 
         if (timestamps.isEmpty()) {
-            // Se crea el formato y se le aplica la zona horaria
             SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
                 timeZone = cdmxTimeZone
             }
@@ -73,12 +69,10 @@ fun rememberAdaptiveAxisFormatter(history: List<Pair<Long, Float>>): AxisValueFo
 
             when {
                 durationMillis > TimeUnit.DAYS.toMillis(1) ->
-                    // Se crea el formato y se le aplica la zona horaria
                     SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).apply {
                         timeZone = cdmxTimeZone
                     }
                 else ->
-                    // Se crea el formato y se le aplica la zona horaria
                     SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
                         timeZone = cdmxTimeZone
                     }
@@ -91,7 +85,6 @@ fun rememberAdaptiveAxisFormatter(history: List<Pair<Long, Float>>): AxisValueFo
     }
 }
 
-
 @Composable
 fun VocChartSection(
     vocData: VocData,
@@ -102,9 +95,16 @@ fun VocChartSection(
     println("LOG UI: Historial para ${vocData.name} tiene ${vocData.history.size} puntos.")
     var isDropdownExpanded by remember { mutableStateOf(false) }
 
-    val chartEntryModelProducer = remember(vocData.history) {
-        ChartEntryModelProducer(vocData.history.map { entryOf(it.first, it.second) })
+    // --- INICIA LA CORRECCIÓN ---
+    // 1. Creamos el productor de datos UNA SOLA VEZ y lo recordamos.
+    val chartEntryModelProducer = remember { ChartEntryModelProducer() }
+
+    // 2. Usamos un `LaunchedEffect` que se ejecutará cada vez que `vocData.history` cambie.
+    LaunchedEffect(vocData.history) {
+        // 3. Le decimos al productor existente que actualice sus entradas con la nueva lista.
+        chartEntryModelProducer.setEntries(vocData.history.map { entryOf(it.first, it.second) })
     }
+    // --- TERMINA LA CORRECCIÓN ---
 
     val adaptiveBottomAxisFormatter = rememberAdaptiveAxisFormatter(history = vocData.history)
 
@@ -164,9 +164,8 @@ fun VocChartSection(
             bottomAxis = rememberBottomAxis(
                 valueFormatter = adaptiveBottomAxisFormatter,
                 title = "Hora",
-                guideline = null, // Quitar guideline para que itemPlacer tenga control total
-                labelRotationDegrees = 0f, // La rotación ya no debería ser necesaria
-                // --- CAMBIO: Se aplica el itemPlacer ---
+                guideline = null,
+                labelRotationDegrees = 0f,
                 itemPlacer = itemPlacer
             ),
             modifier = Modifier.height(150.dp)

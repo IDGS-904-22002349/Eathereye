@@ -1,6 +1,7 @@
 package com.optativesolutions.eathereye
 
 import com.google.firebase.Firebase
+import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.ValueEventListener
@@ -233,5 +234,80 @@ class FirebaseManager {
         testRef.get().addOnCompleteListener { task ->
             onResult(task.isSuccessful && task.result?.getValue(Boolean::class.java) == true)
         }
+    }
+
+    // En FirebaseManager.kt
+
+    fun getInitialHistory(
+        sensorKey: String,
+        onComplete: (List<Pair<Long, Float>>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        historicalDb.child(sensorKey).orderByKey().limitToLast(100).get()
+            .addOnSuccessListener { snapshot ->
+                // --- INICIA LA CORRECCIÓN ---
+                // Esta es la lógica que faltaba para procesar los datos
+                val dataList = snapshot.children.mapNotNull { dataSnapshot ->
+                    val timestamp = dataSnapshot.key?.toLongOrNull()
+                    val rawValue: Any? = dataSnapshot.child("value").value
+
+                    val value: Float? = when (rawValue) {
+                        is Long -> rawValue.toFloat()
+                        is Double -> rawValue.toFloat()
+                        is Float -> rawValue
+                        is Int -> rawValue.toFloat()
+                        else -> null // Si el tipo no es numérico, lo ignoramos
+                    }
+
+                    if (timestamp != null && value != null) {
+                        Pair(timestamp, value)
+                    } else {
+                        null
+                    }
+                }.sortedBy { it.first } // Ordenar por timestamp
+                // --- TERMINA LA CORRECCIÓN ---
+
+                onComplete(dataList)
+            }
+            .addOnFailureListener {
+                onError(it.message ?: "Error desconocido")
+            }
+    }
+
+    fun removeNewReadingsListener(sensorKey: String, listener: ChildEventListener) {
+        historicalDb.child(sensorKey).removeEventListener(listener)
+        // Ya no necesitas el mapa 'activeListeners' para este tipo de listener
+    }
+
+    // NUEVA FUNCIÓN para escuchar solo los nuevos datos
+    fun getNewReadingsListener(
+        sensorKey: String,
+        lastTimestamp: Long, // Escucharemos a partir del último dato que ya tenemos
+        onNewChild: (Pair<Long, Float>) -> Unit,
+        onError: (String) -> Unit
+    ): ChildEventListener {
+        val query = historicalDb.child(sensorKey).orderByKey().startAt(lastTimestamp.toString())
+
+        val listener = object : ChildEventListener {
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                // El timestamp del snapshot.key debe ser > lastTimestamp para ser realmente nuevo
+                val newTimestamp = snapshot.key?.toLongOrNull() ?: 0L
+                if (newTimestamp > lastTimestamp) {
+                    // (El mismo código para procesar un solo snapshot)
+                    val value = snapshot.child("value").value as? Float // Simplificado
+                    if (value != null) {
+                        onNewChild(Pair(newTimestamp, value))
+                    }
+                }
+            }
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onCancelled(error: DatabaseError) {
+                onError(error.message)
+            }
+        }
+        query.addChildEventListener(listener)
+        return listener
     }
 }

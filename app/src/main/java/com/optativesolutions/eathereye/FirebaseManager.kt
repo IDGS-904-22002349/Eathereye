@@ -294,7 +294,15 @@ class FirebaseManager {
                 val newTimestamp = snapshot.key?.toLongOrNull() ?: 0L
                 if (newTimestamp > lastTimestamp) {
                     // (El mismo código para procesar un solo snapshot)
-                    val value = snapshot.child("value").value as? Float // Simplificado
+                    val rawValue: Any? = snapshot.child("value").value
+                    val value: Float? = when (rawValue) {
+                        is Long -> rawValue.toFloat()
+                        is Double -> rawValue.toFloat()
+                        is Float -> rawValue
+                        is Int -> rawValue.toFloat()
+                        else -> null
+                    }
+
                     if (value != null) {
                         onNewChild(Pair(newTimestamp, value))
                     }
